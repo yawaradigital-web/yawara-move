@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: yawara-move-demo
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1
+    healthCheckPath: /api/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.11
+      - key: MOVE_DB
+        value: /tmp/yawara_move_cloud_demo.sqlite3
+      - key: MOVE_CLOUD_DEMO
+        value: '1'
