@@ -41,3 +41,11 @@ el('refreshRides').addEventListener('click',()=>run(loadRides));
 el('refreshOffers').addEventListener('click',()=>run(loadOffers));
 el('goOnline').addEventListener('click',()=>run(async()=>{checkRole('driver');const p=selected('driverPoint');await api('/driver/location','POST',{lat:p.lat,lon:p.lon,online:true});message('Motorista disponível em ponto demonstrativo.');await loadOffers()}));
 el('goOffline').addEventListener('click',()=>run(async()=>{checkRole('driver');const p=selected('driverPoint');await api('/driver/location','POST',{lat:p.lat,lon:p.lon,online:false});message('Disponibilidade desativada.');await loadOffers()}));
+
+// Modality discovery is informative only: future products are not advertised as available.
+document.querySelectorAll('[data-service]').forEach(button=>button.addEventListener('click',()=>{
+ if(button.dataset.service==='rides'){document.querySelector('#origin').focus();document.querySelector('#homePanel .columns').scrollIntoView({behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:'start'});return;}
+ const names={compare:'MOVE Compare',delivery:'MOVE Entregas',journey:'MOVE Viagens',rental:'MOVE Aluguel',business:'MOVE Business'};
+ message((names[button.dataset.service]||'Esta modalidade')+' está em planejamento e ainda não permite solicitar serviços. A simulação de corridas continua disponível.');
+ document.querySelector('#alert').scrollIntoView({block:'nearest'});
+}));
