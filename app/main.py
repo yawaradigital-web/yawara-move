@@ -29,7 +29,7 @@ if STORAGE_BACKEND == 'postgres' and not os.getenv('DATABASE_URL'):
 if any(os.getenv(k, '').lower() in ('1','true','yes','on') for k in ('MOVE_REAL_DISPATCH','MOVE_PAYMENTS_ENABLED')):
     raise RuntimeError('Real operations are forbidden in the sandbox')
 
-app = FastAPI(title='Yawara Move Demo Sandbox', version='1.3.0',
+app = FastAPI(title='Yawara Move Demo Sandbox', version='1.4.0',
                   docs_url=None if os.getenv('MOVE_CLOUD_DEMO') else '/api/docs', redoc_url=None)
 
 # Best-effort per-process throttling for demo public endpoints. This is not
@@ -331,31 +331,42 @@ def transition(ride_id,authorization,role,expected,new):
 @app.post('/api/rides/{ride_id}/accept')
 def accept(ride_id:str,authorization:str|None=Header(None)):
     a=actor(authorization,'driver')
-    with db() as c:
-        c.execute('BEGIN IMMEDIATE')
-        d=c.execute('SELECT * FROM drivers WHERE account_id=?',(a['id'],)).fetchone()
-        if not d or not d['online'] or d['lat'] is None: raise HTTPException(403,'Motorista indisponível')
-        r=c.execute('SELECT * FROM rides WHERE id=?',(ride_id,)).fetchone()
-        if not r:raise HTTPException(404,'Corrida não encontrada')
-        if r['status']!='requested':raise HTTPException(409,'Corrida já aceita ou indisponível')
-        if haversine(d['lat'],d['lon'],r['pickup_lat'],r['pickup_lon'])>30:
-            raise HTTPException(403,'Fora da área demonstrativa')
-        busy=c.execute("SELECT 1 FROM rides WHERE driver_id=? AND status IN ('accepted','in_progress')",(a['id'],)).fetchone()
-        if busy:raise HTTPException(409,'Motorista já possui uma corrida ativa')
-        try:
-            count=c.execute("UPDATE rides SET driver_id=?,status='accepted',updated_at=? WHERE id=? AND status='requested'",
-                            (a['id'],int(time.time()),ride_id)).rowcount
-        except sqlite3.IntegrityError:
-            raise HTTPException(409,'Motorista já possui uma corrida ativa') from None
-        except Exception as ex:
-            # psycopg is optional in local SQLite-only development.
-            if STORAGE_BACKEND == 'postgres':
-                from psycopg.errors import UniqueViolation
-                if isinstance(ex, UniqueViolation):
-                    raise HTTPException(409,'Motorista já possui uma corrida ativa') from None
-            raise
-        if count!=1:raise HTTPException(409,'Corrida já aceita')
-        c.commit()
+    try:
+        with db() as c:
+            c.execute('BEGIN IMMEDIATE')
+            d=c.execute('SELECT * FROM drivers WHERE account_id=?',(a['id'],)).fetchone()
+            if not d or not d['online'] or d['lat'] is None: raise HTTPException(403,'Motorista indisponível')
+            r=c.execute('SELECT * FROM rides WHERE id=?',(ride_id,)).fetchone()
+            if not r:raise HTTPException(404,'Corrida não encontrada')
+            if r['status']!='requested':raise HTTPException(409,'Corrida já aceita ou indisponível')
+            if haversine(d['lat'],d['lon'],r['pickup_lat'],r['pickup_lon'])>30:
+                raise HTTPException(403,'Fora da área demonstrativa')
+            busy=c.execute("SELECT 1 FROM rides WHERE driver_id=? AND status IN ('accepted','in_progress')",(a['id'],)).fetchone()
+            if busy:raise HTTPException(409,'Motorista já possui uma corrida ativa')
+            try:
+                count=c.execute("UPDATE rides SET driver_id=?,status='accepted',updated_at=? WHERE id=? AND status='requested'",
+                                (a['id'],int(time.time()),ride_id)).rowcount
+            except sqlite3.IntegrityError:
+                raise HTTPException(409,'Motorista já possui uma corrida ativa') from None
+            except Exception as ex:
+                # psycopg is optional in local SQLite-only development.
+                if STORAGE_BACKEND == 'postgres':
+                    from psycopg.errors import UniqueViolation
+                    if isinstance(ex, UniqueViolation):
+                        raise HTTPException(409,'Motorista já possui uma corrida ativa') from None
+                raise
+            if count!=1:raise HTTPException(409,'Corrida já aceita')
+            c.commit()
+    except Exception as exc:
+        # The database uniqueness constraint resolves concurrent accepts.
+        # Convert expected contention into HTTP 409, not HTTP 500.
+        postgres_conflict = (getattr(exc, 'sqlstate', None) == '23505'
+                             and 'demo_driver_one_active_idx' in str(exc))
+        sqlite_conflict = (isinstance(exc, sqlite3.IntegrityError)
+                           and 'rides.driver_id' in str(exc))
+        if postgres_conflict or sqlite_conflict:
+            raise HTTPException(409, 'Motorista já possui uma corrida ativa') from None
+        raise
     return {'ride_id':ride_id,'status':'accepted','driver_id':a['id']}
 
 @app.post('/api/rides/{ride_id}/start')
