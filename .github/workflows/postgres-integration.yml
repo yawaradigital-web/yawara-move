@@ -1,0 +1,36 @@
+name: PostgreSQL demo integration
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  postgres:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci_disposable_only
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 12
+    env:
+      MOVE_CI_POSTGRES_URL: postgresql://postgres:ci_disposable_only@localhost:5432/postgres?sslmode=disable
+      MOVE_PAYMENTS_ENABLED: "false"
+      MOVE_REAL_DISPATCH: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python -m pip install -r requirements.txt pytest httpx
+      - run: python -m pytest -v tests/test_postgres_integration.py
