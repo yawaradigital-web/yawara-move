@@ -8,6 +8,9 @@ import sqlite3
 import time
 import uuid
 from contextlib import contextmanager
+from collections import defaultdict, deque
+from threading import Lock
+from fastapi import Request
 from pathlib import Path
 from typing import Literal
 from fastapi import FastAPI, HTTPException, Header
@@ -18,10 +21,54 @@ from pydantic import BaseModel, Field, field_validator
 ROOT = Path(__file__).resolve().parent
 DB = Path(os.getenv('MOVE_DB', str(ROOT.parent / 'move_sandbox.sqlite3')))
 DB.parent.mkdir(parents=True, exist_ok=True)
-app = FastAPI(title='Yawara Move Local Sandbox', version='1.0.0', docs_url='/api/docs', redoc_url=None)
+app = FastAPI(title='Yawara Move Demo Sandbox', version='1.1.0',
+                  docs_url=None if os.getenv('MOVE_CLOUD_DEMO') else '/api/docs', redoc_url=None)
+
+# Best-effort per-process throttling for demo public endpoints. This is not
+# distributed protection; use a shared store/edge WAF before a real launch.
+_limits = defaultdict(deque)
+_limits_lock = Lock()
+_LIMIT_SECONDS = 60
+_LIMIT_BUCKETS = {
+    '/api/register': (30, 60),
+    '/api/quote': (45, 60),
+    '/api/rides': (25, 60),
+}
+
+def should_throttle(client_key: str, bucket: str, limit: int, window: int = 60, now: float | None = None):
+    now = time.monotonic() if now is None else now
+    key = (client_key, bucket)
+    with _limits_lock:
+        # Cap memory use even when many distinct clients send requests.
+        if key not in _limits and len(_limits) >= 5000:
+            oldest = next(iter(_limits))
+            _limits.pop(oldest, None)
+        calls = _limits[key]
+        while calls and calls[0] <= now - window:
+            calls.popleft()
+        if len(calls) >= limit:
+            retry = max(1, math.ceil(window - (now - calls[0])))
+            return retry
+        calls.append(now)
+        return 0
+
 
 @app.middleware('http')
-async def safety_headers(request, call_next):
+async def safety_headers(request: Request, call_next):
+    if request.method == 'POST' and request.url.path.startswith('/api/'):
+        path = request.url.path
+        bucket = path if path in _LIMIT_BUCKETS else '/api/mutations'
+        max_requests, seconds = _LIMIT_BUCKETS.get(bucket, (70, 60))
+        # Ignore untrusted X-Forwarded-For, since clients can forge it.
+        remote = request.client.host if request.client else 'unknown'
+        retry = should_throttle(remote, bucket, max_requests, seconds)
+        if retry:
+            return JSONResponse(
+                status_code=429,
+                content={'detail': 'Muitas tentativas no simulador. Tente novamente em instantes.'},
+                headers={'Retry-After': str(retry), 'Cache-Control': 'no-store',
+                         'X-Content-Type-Options': 'nosniff'},
+            )
     res = await call_next(request)
     res.headers['X-Content-Type-Options'] = 'nosniff'
     res.headers['X-Robots-Tag'] = 'noindex, nofollow, noarchive'
@@ -102,10 +149,12 @@ def actor(authorization: str | None, role: str | None = None):
         raise HTTPException(status_code=401, detail='Sessão não informada')
     token = authorization[7:]
     with db() as c:
-        a = c.execute('SELECT id,name,role FROM accounts WHERE token_hash=?', (token_hash(token),)).fetchone()
+        a = c.execute('SELECT id,name,role,created_at FROM accounts WHERE token_hash=?', (token_hash(token),)).fetchone()
     if not a: raise HTTPException(status_code=401, detail='Sessão inválida')
+    if int(time.time()) - a['created_at'] > 24 * 3600:
+        raise HTTPException(status_code=401, detail='Sessão de demonstração expirada; crie uma nova conta de teste')
     if role and a['role'] != role: raise HTTPException(status_code=403, detail='Permissão insuficiente')
-    return dict(a)
+    return {'id': a['id'], 'name': a['name'], 'role': a['role']}
 
 def haversine(a,b,c,d):
     p1,p2 = math.radians(a), math.radians(c)
@@ -133,7 +182,9 @@ def serialize_ride(row):
 def health():
     return {'status':'ok','app':'yawara-move-sandbox','database':'sqlite-development',
             'gateway_mode':'sandbox_emulator','payments_enabled':False,'external_maps_enabled':False,
-            'real_dispatch_enabled':False,'demo_hosting':bool(os.getenv('MOVE_CLOUD_DEMO'))}
+            'real_dispatch_enabled':False,'demo_hosting':bool(os.getenv('MOVE_CLOUD_DEMO')),
+            'identity_verification_enabled':False,'persistent_storage':False,
+            'demo_access_ttl_hours':24,'distributed_rate_limit':False}
 
 @app.post('/api/register', status_code=201)
 def register(data:Register):
