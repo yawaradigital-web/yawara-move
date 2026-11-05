@@ -21,7 +21,15 @@ from pydantic import BaseModel, Field, field_validator
 ROOT = Path(__file__).resolve().parent
 DB = Path(os.getenv('MOVE_DB', str(ROOT.parent / 'move_sandbox.sqlite3')))
 DB.parent.mkdir(parents=True, exist_ok=True)
-app = FastAPI(title='Yawara Move Demo Sandbox', version='1.1.0',
+STORAGE_BACKEND = os.getenv('MOVE_STORAGE_BACKEND', 'sqlite').lower()
+if STORAGE_BACKEND not in ('sqlite','postgres'):
+    raise RuntimeError('MOVE_STORAGE_BACKEND must be sqlite or postgres')
+if STORAGE_BACKEND == 'postgres' and not os.getenv('DATABASE_URL'):
+    raise RuntimeError('Postgres selected without DATABASE_URL; refusing silent SQLite fallback')
+if any(os.getenv(k, '').lower() in ('1','true','yes','on') for k in ('MOVE_REAL_DISPATCH','MOVE_PAYMENTS_ENABLED')):
+    raise RuntimeError('Real operations are forbidden in the sandbox')
+
+app = FastAPI(title='Yawara Move Demo Sandbox', version='1.2.0',
                   docs_url=None if os.getenv('MOVE_CLOUD_DEMO') else '/api/docs', redoc_url=None)
 
 # Best-effort per-process throttling for demo public endpoints. This is not
@@ -78,18 +86,53 @@ async def safety_headers(request: Request, call_next):
     res.headers['Content-Security-Policy'] = "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; img-src 'self' data:"
     return res
 
+class PostgresCompat:
+    """SQL compatibility for isolated ym_demo schema; never expose this role to browsers."""
+    def __init__(self, conn):
+        self.conn = conn
+    def execute(self, query, params=()):
+        stmt = query.strip()
+        if stmt.upper() == 'BEGIN IMMEDIATE':
+            stmt = 'BEGIN'
+        if stmt.upper().startswith('SELECT * FROM RIDES WHERE ID=?'):
+            stmt += ' FOR UPDATE'
+        stmt = stmt.replace('?', '%s')
+        return self.conn.execute(stmt, params)
+    def commit(self):
+        # Explicit transaction is opened by BEGIN IMMEDIATE -> BEGIN.
+        self.conn.execute('COMMIT')
+    def close(self):
+        self.conn.close()
+
 @contextmanager
 def db():
-    conn = sqlite3.connect(DB, timeout=10, isolation_level=None, check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    conn.execute('PRAGMA busy_timeout=10000')
-    conn.execute('PRAGMA foreign_keys=ON')
+    if STORAGE_BACKEND == 'postgres':
+        # Dedicated server-side connection string. Credential is supplied through
+        # Render secret env vars, never committed or returned by the API.
+        from psycopg import connect
+        from psycopg.rows import dict_row
+        conn = PostgresCompat(connect(
+            os.environ['DATABASE_URL'], autocommit=True, row_factory=dict_row,
+            options='-c search_path=ym_demo', connect_timeout=5))
+    else:
+        conn = sqlite3.connect(DB, timeout=10, isolation_level=None, check_same_thread=False)
+        conn.row_factory = sqlite3.Row
+        conn.execute('PRAGMA busy_timeout=10000')
+        conn.execute('PRAGMA foreign_keys=ON')
     try:
         yield conn
     finally:
         conn.close()
 
 def init_db():
+    if STORAGE_BACKEND == 'postgres':
+        with db() as c:
+            # Refuse to run against unrelated schemas or incomplete migrations.
+            for table in ('accounts','drivers','rides','payments'):
+                row = c.execute('SELECT to_regclass(%s) AS rel', (f'ym_demo.{table}',)).fetchone()
+                if row['rel'] is None:
+                    raise RuntimeError(f'Missing isolated sandbox table ym_demo.{table}')
+        return
     with db() as c:
         c.execute('PRAGMA journal_mode=WAL')
         c.executescript('''
@@ -180,11 +223,31 @@ def serialize_ride(row):
 
 @app.get('/api/health')
 def health():
-    return {'status':'ok','app':'yawara-move-sandbox','database':'sqlite-development',
+    return {'status':'ok','app':'yawara-move-sandbox','database':'postgres-isolated-demo' if STORAGE_BACKEND == 'postgres' else 'sqlite-development',
             'gateway_mode':'sandbox_emulator','payments_enabled':False,'external_maps_enabled':False,
             'real_dispatch_enabled':False,'demo_hosting':bool(os.getenv('MOVE_CLOUD_DEMO')),
-            'identity_verification_enabled':False,'persistent_storage':False,
+            'identity_verification_enabled':False,'persistent_storage':STORAGE_BACKEND == 'postgres',
             'demo_access_ttl_hours':24,'distributed_rate_limit':False}
+
+@app.get('/api/ready')
+def readiness():
+    try:
+        with db() as c:
+            c.execute('SELECT 1')
+    except Exception:
+        return JSONResponse({'status':'unavailable'}, status_code=503)
+    return {'status':'ready', 'environment':'sandbox'}
+
+@app.post('/api/logout')
+def logout(authorization:str|None=Header(None)):
+    a = actor(authorization)
+    token = authorization[7:]
+    with db() as c:
+        # Rotating the hash immediately invalidates the old bearer token,
+        # without breaking test ride records that reference the account.
+        c.execute('UPDATE accounts SET token_hash=? WHERE id=? AND token_hash=?',
+                  ('revoked:'+secrets.token_hex(24), a['id'], token_hash(token)))
+    return {'status':'signed_out','environment':'sandbox'}
 
 @app.post('/api/register', status_code=201)
 def register(data:Register):
@@ -193,7 +256,7 @@ def register(data:Register):
     with db() as c:
         c.execute('BEGIN IMMEDIATE')
         c.execute('INSERT INTO accounts VALUES(?,?,?,?,?)',(uid,data.name,data.role,token_hash(new_token),int(time.time())))
-        if data.role=='driver': c.execute('INSERT INTO drivers VALUES(?,?,?,?,?)',(uid,0,None,None,int(time.time())))
+        if data.role=='driver': c.execute('INSERT INTO drivers VALUES(?,?,?,?,?)',(uid,False,None,None,int(time.time())))
         c.commit()
     return {'account_id':uid,'name':data.name,'role':data.role,'token':new_token,'environment':'local_demo'}
 
@@ -210,7 +273,7 @@ def location(data:Location,authorization:str|None=Header(None)):
     a=actor(authorization,'driver')
     with db() as c:
         c.execute('UPDATE drivers SET online=?,lat=?,lon=?,updated_at=? WHERE account_id=?',
-                  (int(data.online),data.lat,data.lon,int(time.time()),a['id']))
+                  (data.online,data.lat,data.lon,int(time.time()),a['id']))
     return {'status':'updated','online':data.online}
 
 @app.post('/api/rides', status_code=201)

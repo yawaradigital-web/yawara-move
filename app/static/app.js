@@ -36,7 +36,7 @@ function renderQuote(q){const box=el('quoteResult');box.replaceChildren();box.cl
 points();updateSession();document.querySelectorAll('.nav button').forEach(b=>b.addEventListener('click',()=>switchPanel(b.dataset.panel)));
 el('quote').addEventListener('click',()=>run(async()=>{lastQuote=await api('/quote','POST',{origin:selected('origin'),destination:selected('destination')});renderQuote(lastQuote)}));
 el('register').addEventListener('click',()=>run(async()=>{const data=await api('/register','POST',{name:el('personName').value.trim(),role:el('role').value});session=data;sessionStorage.setItem(sessionKey,JSON.stringify(session));updateSession();message('Conta de teste criada. Nenhuma identidade real foi verificada.')}));
-el('logout').addEventListener('click',()=>{session=null;sessionStorage.removeItem(sessionKey);updateSession();switchPanel('home');message('Sessão local encerrada.')});
+el('logout').addEventListener('click',async()=>{let remoteRevoked=false;try{if(session){await api('/logout','POST');remoteRevoked=true}}catch(e){}session=null;sessionStorage.removeItem(sessionKey);updateSession();switchPanel('home');message(remoteRevoked?'Sessão de teste encerrada e revogada.':'Sessão removida deste navegador; não foi possível confirmar a revogação remota.')});
 el('refreshRides').addEventListener('click',()=>run(loadRides));
 el('refreshOffers').addEventListener('click',()=>run(loadOffers));
 el('goOnline').addEventListener('click',()=>run(async()=>{checkRole('driver');const p=selected('driverPoint');await api('/driver/location','POST',{lat:p.lat,lon:p.lon,online:true});message('Motorista disponível em ponto demonstrativo.');await loadOffers()}));
