@@ -43,8 +43,43 @@
     status.textContent='Mapa de ruas por OpenStreetMap carregado. Seu navegador pode contatar o servidor público de mapas; não há navegação nem rastreamento.';
     requestAnimationFrame(()=>{map.invalidateSize();sync()});
   });
+  const routeButton=document.getElementById('roadDemoRoute');
+  const routeResult=document.getElementById('roadDemoResult');
+  let routeLine=null;
+  let routeNonce=0;
+  function clearRoute(){
+    routeNonce++;
+    if(routeLine && map){map.removeLayer(routeLine);routeLine=null;}
+    if(routeResult)routeResult.textContent='Consulta viária opcional. O percurso exibido não representa uma viagem contratada.';
+  }
+  if(routeButton && routeResult){
+    routeButton.addEventListener('click',async()=>{
+      const a=document.getElementById('origin'),b=document.getElementById('destination');
+      if(!a||!b){routeResult.textContent='Escolha Corridas ou Comparar para consultar a rota.';return;}
+      if(a.value===b.value){routeResult.textContent='Escolha dois locais diferentes.';return;}
+      const nonce=++routeNonce;
+      routeButton.disabled=true;
+      routeResult.textContent='Consultando percurso demonstrativo pelas ruas...';
+      try{
+        const response=await fetch('/api/demo-route?origin='+encodeURIComponent(a.value)+'&destination='+encodeURIComponent(b.value),{headers:{'Accept':'application/json'}});
+        const data=await response.json();
+        if(nonce!==routeNonce)return;
+        if(!response.ok)throw Error(typeof data.detail==='string'?data.detail:'Serviço de rotas indisponível.');
+        if(!Array.isArray(data.coordinates)||data.coordinates.length<2||data.coordinates.length>4000||data.routing!=='road_demo_not_guaranteed')throw Error('Dados de rota inválidos.');
+        const positions=data.coordinates.map(p=>[p[1],p[0]]);
+        if(positions.some(p=>p.length!==2||p.some(v=>typeof v!=='number'||!Number.isFinite(v))))throw Error('Coordenadas de rota inválidas.');
+        if(!map)button.click();
+        if(!map)throw Error('Mapa indisponível no momento.');
+        if(routeLine)map.removeLayer(routeLine);
+        routeLine=L.polyline(positions,{color:'#35d5cf',weight:5,opacity:.9}).addTo(map);
+        map.fitBounds(routeLine.getBounds().pad(.15),{maxZoom:14,animate:false});
+        routeResult.textContent='Percurso viário demonstrativo: '+data.distance_km.toLocaleString('pt-BR')+' km · cerca de '+data.duration_minutes_illustrative+' min em condições de referência. Não considera trânsito ao vivo e NÃO é previsão de chegada. Fonte: '+data.source+'.';
+      }catch(err){if(nonce===routeNonce)routeResult.textContent='Não foi possível consultar o percurso: '+(err.message||'erro de conexão')+' A linha ilustrativa permanece disponível.';}
+      finally{routeButton.disabled=false;}
+    });
+  }
   document.addEventListener('change',event=>{
-    if(event.target && (event.target.id==='origin'||event.target.id==='destination'))sync();
+    if(event.target && (event.target.id==='origin'||event.target.id==='destination')){clearRoute();sync();}
   });
   document.querySelectorAll('[data-tab]').forEach(tab=>tab.addEventListener('click',()=>{
     if(map)requestAnimationFrame(()=>{map.invalidateSize();sync()});
