@@ -101,7 +101,10 @@ async def safety_headers(request: Request, call_next):
     res.headers['Referrer-Policy'] = 'no-referrer'
     res.headers['Cache-Control'] = 'no-store'
     res.headers['X-Frame-Options'] = 'DENY'
-    res.headers['Content-Security-Policy'] = "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; img-src 'self' data:"
+    res.headers['Content-Security-Policy'] = ("default-src 'self'; style-src 'self' 'unsafe-inline' https://unpkg.com; "
+      "script-src 'self' https://unpkg.com; connect-src 'self'; "
+      "img-src 'self' data: https://unpkg.com https://tile.openstreetmap.org; "
+      "font-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'")
     return res
 
 class PostgresCompat:
