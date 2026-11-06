@@ -29,3 +29,12 @@ def test_existing_quote_and_routing_remain_illustrative():
         status=c.get('/api/health').json()
         assert status['real_dispatch_enabled'] is False
         assert status['payments_enabled'] is False
+
+def test_map_destination_selection_keeps_demo_only():
+    with TestClient(app) as c:
+        script=c.get('/static/map-explore.js')
+        assert script.status_code==200
+        assert 'L.circleMarker' in script.text
+        assert "destination.dispatchEvent(new Event('change'" in script.text
+        assert 'PLACES.forEach' in script.text
+        assert 'addSamplePoints()' in script.text
