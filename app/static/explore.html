@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#081824"><title>MOVE Explore | Yawara Move</title><link rel="stylesheet" href="/static/explore.css"></head>
+<body><header><img src="/static/move-logo-cropped.jpg" alt="MOVE — logo oficial"><a class="back" href="/">Voltar ao MOVE</a></header>
+<main><span class="eyebrow">YAWARA MOVE / EXPERIENCE LAB</span><h1>Seu mundo em <span>movimento.</span></h1><p class="intro">Conheça o futuro da mobilidade em uma experiência de demonstração. Compare uma estimativa fictícia, explore serviços e planeje seu próximo trajeto.</p>
+<div class="notice">Ambiente de testes: sem corridas reais, pagamentos, reservas, entregas ou ofertas de terceiros. Não informe dados pessoais.</div>
+<nav class="tabs" aria-label="Serviços de mobilidade">
+<button type="button" data-tab="corridas" aria-selected="true">Corridas</button>
+<button type="button" data-tab="comparar" aria-selected="false">Comparar</button>
+<button type="button" data-tab="entregas" aria-selected="false">Entregas</button>
+<button type="button" data-tab="viagens" aria-selected="false">Viagens</button>
+<button type="button" data-tab="aluguel" aria-selected="false">Aluguel</button>
+<button type="button" data-tab="business" aria-selected="false">Business</button>
+</nav>
+<div class="layout"><section class="card"><div id="experience"><h2>Para onde vamos?</h2><p>Escolha dois locais para uma estimativa puramente ilustrativa.</p>
+<div class="field"><label for="origin">Origem</label><select id="origin"></select></div>
+<div class="field"><label for="destination">Destino</label><select id="destination"></select></div>
+<button class="primary" id="estimate" type="button">Ver estimativa de teste</button><div id="estimateResult" role="status" aria-live="polite"></div>
+</div></section>
+<aside class="card"><h2>MOVE Intelligence</h2><p>Uma plataforma, múltiplas alternativas.</p>
+<div class="result"><strong>Transparência em primeiro lugar</strong><p class="fine">O valor demonstrado vem exclusivamente do nosso simulador. Não são exibidos preços inventados da Uber, 99, inDrive ou de outros parceiros.</p></div>
+<div class="result"><strong>Mais serviços</strong><p class="fine">Entregas, viagens, aluguel e gestão corporativa estão em planejamento. Você pode conhecer o conceito de cada módulo.</p></div>
+<a href="/" class="back">Abrir simulador de corridas</a>
+</aside></div>
+<p class="fine" style="margin-top:24px">Comissão simulada MOVE Driver: 10% do valor demonstrativo. Distância estimada não é rota de navegação.</p></main><script src="/static/explore.js" defer></script></body></html>
