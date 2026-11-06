@@ -47,7 +47,7 @@ if STORAGE_BACKEND == 'postgres':
 if any(os.getenv(k, '').lower() in ('1','true','yes','on') for k in ('MOVE_REAL_DISPATCH','MOVE_PAYMENTS_ENABLED')):
     raise RuntimeError('Real operations are forbidden in the sandbox')
 
-app = FastAPI(title='Yawara Move Demo Sandbox', version='1.7.0',
+app = FastAPI(title='Yawara Move Demo Sandbox', version='1.8.0',
                   docs_url=None if os.getenv('MOVE_CLOUD_DEMO') else '/api/docs', redoc_url=None)
 
 # Best-effort per-process throttling for demo public endpoints. This is not
@@ -446,6 +446,22 @@ def summary(authorization:str|None=Header(None)):
 @app.head('/')
 def root_head():
     return Response(status_code=200)
+
+class AddressPreviewRequest(BaseModel):
+    text: str = Field(min_length=4, max_length=100)
+
+@app.get('/api/address-preview/status')
+def address_preview_status():
+    from .address_search import geocoder_enabled
+    return {'enabled': geocoder_enabled(), 'mode': 'preview_only',
+            'can_request_ride': False, 'can_calculate_fare': False}
+
+@app.post('/api/address-preview')
+def address_preview(req: AddressPreviewRequest):
+    """Server-only provider key. Never use address previews as trusted ride coordinates."""
+    from .address_search import find_addresses
+    return {'results': find_addresses(req.text), 'mode': 'preview_only',
+            'can_request_ride': False, 'can_calculate_fare': False}
 
 @app.get('/api/demo-route')
 def get_demo_route(origin: int, destination: int):
