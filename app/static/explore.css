@@ -22,3 +22,18 @@
 .move-place-noresults{padding:11px;margin:0;font-size:12px;color:#bbd0d7}
 .move-place-search .hidden{display:none!important}
 @media(max-width:600px){.move-place-options{max-height:210px}.move-place-input{font-size:16px}}
+
+/* Optional address previews never feed live dispatch, fare calculation or map navigation. */
+.address-preview-section{margin-top:20px}
+.address-preview-form{display:grid;gap:10px}
+.address-preview-form label{font-size:12px;font-weight:700;color:#d8eced}
+.address-preview-controls{display:flex;gap:12px;align-items:stretch}
+.address-preview-controls input{flex:1;min-width:0;min-height:48px;border:1px solid #547989;border-radius:11px;background:#0a202f;color:#fff;padding:12px 14px;font:inherit}
+.address-preview-controls input::placeholder{color:#abc6ce}
+.address-preview-controls button{flex:0 0 auto}
+.address-preview-controls button:disabled{opacity:.5;cursor:not-allowed}
+.address-preview-results{display:grid;gap:10px;margin:14px 0}
+.address-preview-item{background:#0e3441;border:1px solid #32616a;border-radius:12px;padding:13px 16px}
+.address-preview-item strong{display:block;font-size:13px}
+.address-preview-item small{display:block;margin-top:5px;color:#adc3c9;line-height:1.5}
+@media(max-width:660px){.address-preview-controls{flex-direction:column}.address-preview-controls button{width:100%}.address-preview-controls input{font-size:16px}}
