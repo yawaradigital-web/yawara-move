@@ -29,6 +29,7 @@ function activate(key){
  document.getElementById('destination').addEventListener('change',drawDiagram);
  document.getElementById('locateDemo').addEventListener('click',requestLocation);
  drawDiagram();
+ if(typeof window.initMovePlaceSearch==='function')window.initMovePlaceSearch();
  if(key==='comparar')content.insertAdjacentHTML('afterbegin','<div class="notice">Comparação demonstrativa: somente MOVE possui um valor ilustrativo. Sem dados de terceiros.</div>');
 }
 
