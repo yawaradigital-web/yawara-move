@@ -1,0 +1,19 @@
+{
+  "name": "Yawara Move — Demonstração",
+  "short_name": "MOVE Demo",
+  "description": "Protótipo demonstrativo de mobilidade. Sem corridas ou pagamentos reais.",
+  "start_url": "/explore",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#081824",
+  "theme_color": "#081824",
+  "lang": "pt-BR",
+  "icons": [
+    {
+      "src": "/static/move-logo-cropped.jpg",
+      "sizes": "any",
+      "type": "image/jpeg",
+      "purpose": "any"
+    }
+  ]
+}
