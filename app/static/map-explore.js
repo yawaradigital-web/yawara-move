@@ -7,6 +7,28 @@
   if (!button || !host || !status) return;
   let map = null, originMarker = null, destinationMarker = null, connector = null;
   const bounds = [[-23.73,-46.80],[-23.48,-46.47]];
+  let sampleLayer=null;
+  function addSamplePoints(){
+    if(!map || sampleLayer || typeof PLACES==='undefined')return;
+    sampleLayer=L.layerGroup().addTo(map);
+    PLACES.forEach((point,index)=>{
+      const marker=L.circleMarker([point.lat,point.lon],{
+        radius:7,color:'#f4fcfb',weight:2,fillColor:'#35d5cf',fillOpacity:1
+      }).addTo(sampleLayer);
+      marker.bindTooltip(point.label,{direction:'top'});
+      marker.on('click',()=>{
+        const destination=document.getElementById('destination');
+        if(!destination){
+          status.textContent='Abra Corridas ou Comparar para escolher um destino.';
+          return;
+        }
+        destination.value=String(index);
+        destination.dispatchEvent(new Event('change',{bubbles:true}));
+        status.textContent='Destino demonstrativo selecionado no mapa: '+point.label+'. Agora você pode consultar a rota de teste.';
+      });
+    });
+  }
+
   function sync(){
     if (!map || typeof PLACES === 'undefined') return;
     const origin = document.getElementById('origin');
@@ -39,6 +61,7 @@
       crossOrigin:true
     }).addTo(map);
     map.fitBounds(bounds);
+    addSamplePoints();
     button.textContent='Atualizar pontos no mapa';
     status.textContent='Mapa de ruas por OpenStreetMap carregado. Seu navegador pode contatar o servidor público de mapas; não há navegação nem rastreamento.';
     requestAnimationFrame(()=>{map.invalidateSize();sync()});
