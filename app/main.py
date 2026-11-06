@@ -47,7 +47,7 @@ if STORAGE_BACKEND == 'postgres':
 if any(os.getenv(k, '').lower() in ('1','true','yes','on') for k in ('MOVE_REAL_DISPATCH','MOVE_PAYMENTS_ENABLED')):
     raise RuntimeError('Real operations are forbidden in the sandbox')
 
-app = FastAPI(title='Yawara Move Demo Sandbox', version='1.5.0',
+app = FastAPI(title='Yawara Move Demo Sandbox', version='1.6.0',
                   docs_url=None if os.getenv('MOVE_CLOUD_DEMO') else '/api/docs', redoc_url=None)
 
 # Best-effort per-process throttling for demo public endpoints. This is not
@@ -443,6 +443,9 @@ def summary(authorization:str|None=Header(None)):
 @app.head('/')
 def root_head():
     return Response(status_code=200)
+
+@app.get('/explore')
+def explore():return FileResponse(ROOT/'static'/'explore.html')
 
 @app.get('/')
 def home():return FileResponse(ROOT/'static'/'index.html')
