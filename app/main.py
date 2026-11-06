@@ -13,8 +13,9 @@ from threading import Lock
 from fastapi import Request
 from pathlib import Path
 from typing import Literal
+from urllib.parse import urlsplit, parse_qs
 from fastapi import FastAPI, HTTPException, Header
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
 
@@ -26,10 +27,27 @@ if STORAGE_BACKEND not in ('sqlite','postgres'):
     raise RuntimeError('MOVE_STORAGE_BACKEND must be sqlite or postgres')
 if STORAGE_BACKEND == 'postgres' and not os.getenv('DATABASE_URL'):
     raise RuntimeError('Postgres selected without DATABASE_URL; refusing silent SQLite fallback')
+
+def validate_pg_url(url: str) -> None:
+    """Fail closed for remote PostgreSQL without explicit transport encryption."""
+    try:
+        parts = urlsplit(url)
+        host = parts.hostname
+    except ValueError:
+        raise RuntimeError('Invalid PostgreSQL connection URL') from None
+    if parts.scheme not in ('postgres','postgresql') or not host:
+        raise RuntimeError('Invalid PostgreSQL connection URL')
+    if host not in ('127.0.0.1','localhost','::1'):
+        tls = parse_qs(parts.query).get('sslmode', [''])[0]
+        if tls not in ('require','verify-ca','verify-full'):
+            raise RuntimeError('TLS required for remote PostgreSQL; set sslmode=require or stronger')
+
+if STORAGE_BACKEND == 'postgres':
+    validate_pg_url(os.environ['DATABASE_URL'])
 if any(os.getenv(k, '').lower() in ('1','true','yes','on') for k in ('MOVE_REAL_DISPATCH','MOVE_PAYMENTS_ENABLED')):
     raise RuntimeError('Real operations are forbidden in the sandbox')
 
-app = FastAPI(title='Yawara Move Demo Sandbox', version='1.4.0',
+app = FastAPI(title='Yawara Move Demo Sandbox', version='1.5.0',
                   docs_url=None if os.getenv('MOVE_CLOUD_DEMO') else '/api/docs', redoc_url=None)
 
 # Best-effort per-process throttling for demo public endpoints. This is not
@@ -421,6 +439,10 @@ def summary(authorization:str|None=Header(None)):
                           WHERE '''+('r.passenger_id=?' if a['role']=='passenger' else 'r.driver_id=?'),(a['id'],)).fetchone()
     return {'rides_by_status':{r['status']:r['n'] for r in records},'simulated_paid_cents':paid['gross'],
             'simulated_commission_cents':paid['commission'],'environment':'local_sandbox'}
+
+@app.head('/')
+def root_head():
+    return Response(status_code=200)
 
 @app.get('/')
 def home():return FileResponse(ROOT/'static'/'index.html')
