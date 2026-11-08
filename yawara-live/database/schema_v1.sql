@@ -73,8 +73,11 @@ create policy yl_matches_owner_select on public.yl_matches for select to authent
 create policy yl_matches_owner_insert on public.yl_matches for insert to authenticated with check(owner_id=(select auth.uid()) and exists(select 1 from public.yl_clubs a join public.yl_clubs b on b.id=club_b_id where a.id=club_a_id and a.owner_id=(select auth.uid()) and b.owner_id=(select auth.uid())));
 create policy yl_matches_owner_update on public.yl_matches for update to authenticated using(owner_id=(select auth.uid())) with check(owner_id=(select auth.uid()) and exists(select 1 from public.yl_clubs a join public.yl_clubs b on b.id=club_b_id where a.id=club_a_id and a.owner_id=(select auth.uid()) and b.owner_id=(select auth.uid())));
 create policy yl_matches_public_read on public.yl_matches for select to anon using(share_public=true);
+-- Before making matches public, avoid returning owner_id to anonymous viewers via Data API;
+-- preferably expose a dedicated read-only projection through a trusted backend.
 create policy yl_participants_owner_read on public.yl_participants for select to authenticated using(exists(select 1 from public.yl_matches m where m.id=match_id and m.owner_id=(select auth.uid())));
-create policy yl_participants_public_read on public.yl_participants for select to anon using(exists(select 1 from public.yl_matches m where m.id=match_id and m.share_public=true));
+-- Do not grant anonymous SELECT over yl_participants: platform_user_key can contain identifying data.
+-- Public scoreboards must use a separate sanitized projection served by a trusted backend.
 create policy yl_events_owner_read on public.yl_events for select to authenticated using(exists(select 1 from public.yl_matches m where m.id=match_id and m.owner_id=(select auth.uid())));
 create policy yl_gift_rules_owner_all on public.yl_gift_rules for all to authenticated using(owner_id=(select auth.uid())) with check(owner_id=(select auth.uid()));
 
