@@ -1,0 +1,11 @@
+const assert=require('node:assert/strict'), engine=require('../engine.js');
+let s=engine.fresh();s=engine.join(s,'ana','sp','Ana');s=engine.join(s,'bia','sp','Bia');s=engine.join(s,'cai','cor','Caio');
+let e=engine.event(s,{id:'like1',userId:'ana',type:'like',units:100},{});s=e.state;assert.equal(e.awarded,100);assert.equal(engine.ranking(s,'sp','gift').length,0);assert.equal(engine.ranking(s,'sp','fan')[0].role,'Líder da Torcida');
+e=engine.event(s,{id:'gift1',userId:'bia',type:'gift',giftId:'rose',units:3},{rose:50});s=e.state;assert.equal(e.awarded,150);assert.equal(engine.ranking(s,'sp','gift')[0].id,'bia');
+e=engine.event(s,{id:'gift1',userId:'bia',type:'gift',giftId:'rose',units:3},{rose:50});assert.equal(e.duplicate,true);assert.equal(engine.score(s,'sp').total,250);
+e=engine.event(s,{id:'follow1',userId:'ana',type:'follow'},{});s=e.state;assert.equal(e.awarded,5);
+e=engine.event(s,{id:'follow2',userId:'ana',type:'follow'},{});assert.equal(e.duplicate,true);assert.equal(engine.score(s,'sp').fan,105);
+e=engine.event(s,{id:'gift2',userId:'ana',type:'gift',giftId:'rose',units:4},{rose:50});s=e.state;assert.equal(engine.ranking(s,'sp','gift')[0].id,'ana');assert.equal(engine.ranking(s,'sp','fan')[0].id,'ana');assert.equal(engine.score(s,'sp').total,455);
+assert.throws(()=>engine.event(s,{id:'bad',userId:'ana',type:'gift',giftId:'unknown'},{rose:50}),/não configurado/);
+assert.throws(()=>engine.event(s,{id:'bad2',userId:'ana',type:'like',units:0},{}),/inválida/);
+console.log('PASS: points, leadership, one-time actions, duplicate event ID, club sum, validation');
